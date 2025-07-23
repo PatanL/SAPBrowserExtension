@@ -32,34 +32,69 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   }
 });
 
-// 3️⃣  DevTools‑protocol events
+// ➊ at the top of your background.js, before the listener:
+const pending = new Set();
+
+// ➋ replace your existing chrome.debugger.onEvent listener with this:
 chrome.debugger.onEvent.addListener((src, method, params) => {
   const sid = src.sessionId ?? "top";
   console.log(`🚨 [debugger.onEvent] session=${sid} method=${method}`, params);
 
   if (!SESSIONS[sid]) {
-    console.log(`   ↳ Ignoring event from session=${sid} (not in SESSIONS)`);
+    console.log(`   ↳ Ignoring event from session=${sid}`);
     return;
   }
 
-  if (method === "Network.responseReceived") {
-    const url = params.response.url;
-    console.log(`   ↳ Network.responseReceived for URL: ${url}`);
-    if (url.includes(targetApiPattern)) {
-      console.log("   ✅ Detected battle GET, processing response…");
-      handleBattleResponse(src, params.requestId);
-    }
+  // Step 1: when headers arrive for the XHR GET, queue the requestId
+  if (
+    method === "Network.responseReceived" &&
+    params.type === "XHR" &&
+    params.response.status === 200 &&
+    params.response.url.includes(targetApiPattern)
+  ) {
+    console.log("   ✅ responseReceived XHR GET, queuing:", params.requestId);
+    pending.add(params.requestId);
   }
 
+  // Step 2: once loading has finished, actually fetch the body
+  if (
+    method === "Network.loadingFinished" &&
+    pending.has(params.requestId)
+  ) {
+    console.log("   🟢 loadingFinished for:", params.requestId);
+    pending.delete(params.requestId);
+    fetchBattleBody(src, params.requestId);
+  }
+
+  // Remains unchanged: auto‑attach new iframe/worker targets
   if (method === "Target.attachedToTarget") {
     const { sessionId, targetInfo } = params;
-    console.log(`   ↳ Target.attachedToTarget → new session=${sessionId}, type=${targetInfo.type}`);
+    console.log(`   ↳ Target.attachedToTarget → session=${sessionId}, type=${targetInfo.type}`);
     if (targetInfo.type === "iframe" || targetInfo.type === "worker") {
-      console.log(`      • Enabling Network on child target ${sessionId}`);
       enableNetwork(src.tabId, sessionId);
     }
   }
 });
+
+// ➌ add this helper below your listener (or wherever handleBattleResponse lives):
+function fetchBattleBody(src, requestId) {
+  console.log("   ▶️ fetchBattleBody:", requestId);
+  chrome.debugger.sendCommand(
+    src,
+    "Network.getResponseBody",
+    { requestId },
+    response => {
+      if (chrome.runtime.lastError) {
+        console.error("   ❌ getResponseBody failed:", chrome.runtime.lastError.message);
+        return;
+      }
+      console.log("   ✔️ getResponseBody success, length=", response.body.length);
+      // now call your existing parsing + storage logic:
+      handleBattleResponse(src, requestId, response.body);
+    }
+  );
+}
+
 
 // ─── Attachment & Networking ───────────────────────────────────────────────
 
@@ -147,10 +182,17 @@ function handleBattleResponse(src, requestId) {
       console.log("   • Extracted minions:", minions);
       console.log("   • Extracted spells:", spells);
 
-      chrome.storage.local.set({
-        battleData: { minions, spells, timestamp: Date.now() }
-      }, () => {
-        console.log("   🎉 chrome.storage.local.set completed");
+      const battleData = { minions, spells, timestamp: Date.now() };
+      chrome.storage.local.set({ battleData }, () => {
+        console.log("🎉 battleData saved to storage");
+    
+        // 👉 New: notify any open popup immediately
+        chrome.runtime.sendMessage({
+          type: "NEW_BATTLE_DATA",
+          payload: battleData
+        }, () => {
+          console.log("📨 Sent NEW_BATTLE_DATA message to popup(s)");
+        });
       });
     }
   );
