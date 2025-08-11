@@ -168,12 +168,12 @@ const TOY_MAP = {
 const PACK_MAP = { 0: "Turtle", 1: "Puppy", 2: "Star", 3: "Golden", 6: "Unicorn" };
 
 
-console.log("⏱️  [Background] Service worker started and listening.");
+
 
 // This is the NEW main entry point for all data.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SAP_BATTLE_DATA_FROM_PAGE') {
-    console.log('[Background] Received battle data from content script.');
+    
     handleBattleResponse(message.payload);
   }
   // It's good practice to return true for async responses, even if not used.
@@ -196,7 +196,7 @@ function handleBattleResponse(battleJson) {
       // Also send a direct message to the popup if it's open for a "live" update
       chrome.runtime.sendMessage({ type: "NEW_BATTLE_DATA", payload: battleData });
     });
-    console.log("🎉 Battle data and calculator link processed and stored!");
+    
   } catch (e) {
     console.error("❌ Data processing failed in handleBattleResponse:", e);
   }
@@ -213,7 +213,7 @@ function parseForCalculator(battleJson) {
       const petId = petJson.Enu;
       const petName = PET_MAP[petId] || null;
 
-      console.log(`[Parser] Found Pet - ID (Enu): ${petId}, Mapped Name: ${petName}`);
+      
 
       let equipment = null;
       if (petJson.Perk !== null && petJson.Perk !== undefined) {

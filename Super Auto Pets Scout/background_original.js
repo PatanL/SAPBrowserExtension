@@ -177,16 +177,14 @@ const PACK_MAP = { 0: "Turtle", 1: "Puppy", 2: "Star", 3: "Golden", 6: "Unicorn"
 // Keep track of battle GETs
 const pending = new Set();
 
-console.log("⏱️  [Background] loaded");
-
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("🔄 [Background] onInstalled – checking already open tabs");
+  
   hookAlreadyOpenTabs();
 });
 
 // Attach debugger when a tab finishes loading
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  console.log(`📄 [tabs.onUpdated] tabId=${tabId} status=${changeInfo.status}`);
+  
   if (changeInfo.status === "complete") {
     maybeAttach(tab);
   }
@@ -194,7 +192,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 // Attach debugger when switching tabs
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
-  console.log(`🔀 [tabs.onActivated] tabId=${tabId}`);
+  
   try {
     const tab = await chrome.tabs.get(tabId);
     maybeAttach(tab);
@@ -206,10 +204,10 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 // Listen to all debugger events
 chrome.debugger.onEvent.addListener((src, method, params) => {
   const sid = src.sessionId ?? "top";
-  console.log(`🚨 [debugger.onEvent] session=${sid} method=${method}`, params);
+  
 
   if (!SESSIONS[sid]) {
-    console.log(`   ↳ Ignoring event from session=${sid}`);
+    
     return;
   }
 
@@ -217,20 +215,20 @@ chrome.debugger.onEvent.addListener((src, method, params) => {
   if (method === "Network.responseReceived"
       && params.response.url.includes(buildPattern)) {
 
-    console.log("🔍 Detected build API call → taking screenshot…");
+    
 
     // Log your permissions state
-    console.log("❓ manifest.permissions:", chrome.runtime.getManifest().permissions);
+    
     chrome.permissions.getAll(all => {
-      console.log("✅ permissions.getAll:", all);
+      
     });
     chrome.permissions.contains({ origins: ["<all_urls>"] }, hasAll => {
-      console.log("✅ permissions.contains('<all_urls>') →", hasAll);
+      
     });
 
     // Grab the current window and screenshot it
     chrome.windows.getCurrent(win => {
-      console.log("🏠 windows.getCurrent →", win && win.id);
+      
       chrome.tabs.captureVisibleTab(
         /* windowId */ win.id,
         /* options  */ { format: "png", quality: 100 },
@@ -239,9 +237,9 @@ chrome.debugger.onEvent.addListener((src, method, params) => {
             console.error("❌ captureVisibleTab failed:", chrome.runtime.lastError);
             return;
           }
-          console.log("📸 Screenshot succeeded, dataURL length:", dataUrl.length);
+          
           chrome.storage.local.set({ lastBuildScreenshot: dataUrl }, () => {
-            console.log("💾 Screenshot saved to storage");
+            
           });
         }
       );
@@ -256,7 +254,7 @@ chrome.debugger.onEvent.addListener((src, method, params) => {
     params.response.status === 200 &&
     params.response.url.includes(targetApiPattern)
   ) {
-    console.log("   ✅ responseReceived XHR GET, queuing:", params.requestId);
+    
     pending.add(params.requestId);
   }
 
@@ -264,7 +262,7 @@ chrome.debugger.onEvent.addListener((src, method, params) => {
     method === "Network.loadingFinished" &&
     pending.has(params.requestId)
   ) {
-    console.log("   🟢 loadingFinished for:", params.requestId);
+    
     pending.delete(params.requestId);
     fetchBattleBody(src, params.requestId);
   }
@@ -272,7 +270,7 @@ chrome.debugger.onEvent.addListener((src, method, params) => {
   // Autodetect iframes/workers and re-enable Network
   if (method === "Target.attachedToTarget") {
     const { sessionId, targetInfo } = params;
-    console.log(`   ↳ Target.attachedToTarget → session=${sessionId}, type=${targetInfo.type}`);
+    
     if (targetInfo.type === "iframe" || targetInfo.type === "worker") {
       enableNetwork(src.tabId, sessionId);
     }
@@ -281,7 +279,7 @@ chrome.debugger.onEvent.addListener((src, method, params) => {
 
 // Helper to fetch the battle JSON body
 function fetchBattleBody(src, requestId) {
-  console.log("   ▶️ fetchBattleBody:", requestId);
+  
   chrome.debugger.sendCommand(
     src,
     "Network.getResponseBody",
@@ -291,7 +289,7 @@ function fetchBattleBody(src, requestId) {
         console.error("   ❌ getResponseBody failed:", chrome.runtime.lastError.message);
         return;
       }
-      console.log("   ✔️ getResponseBody success, length=", response.body.length);
+      
       handleBattleResponse(src, requestId, response.body);
     }
   );
@@ -299,7 +297,7 @@ function fetchBattleBody(src, requestId) {
 
 // Attach debugger & auto-attach to iframes/workers
 async function maybeAttach(tab) {
-  console.log(`🔍 [maybeAttach] tab.id=${tab.id} url=${tab.url}`);
+  
   if (!tab.url || !tab.url.includes(gameUrlPattern)) return;
   if (TAB[tab.id]) return;
 
@@ -312,7 +310,7 @@ async function maybeAttach(tab) {
     });
     await enableNetwork(tab.id, undefined);
     TAB[tab.id] = true;
-    console.log(`   🎉 Attached & ready on tab ${tab.id}`);
+    
   } catch (e) {
     console.error(`   ❌ Error in maybeAttach(tab ${tab.id}):`, e);
   }
@@ -325,7 +323,7 @@ async function enableNetwork(tabId, sessionId) {
   try {
     await chrome.debugger.sendCommand(target, "Network.enable");
     SESSIONS[sid] = { tabId };
-    console.log(`   ✔️ Network.enabled for session=${sid}`);
+    
   } catch (e) {
     console.error(`   ❌ Failed to Network.enable for session=${sid}:`, e);
   }
@@ -362,7 +360,7 @@ function parseForCalculator(battleJson) {
       const petId = petJson.Enu;
       const petName = PET_MAP[petId] || null;
 
-      console.log(`[Parser] Found Pet - ID (Enu): ${petId}, Mapped Name: ${petName}`);
+      
 
       let equipment = null;
       if (petJson.Perk !== null && petJson.Perk !== undefined) {

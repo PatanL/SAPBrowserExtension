@@ -1,4 +1,4 @@
-console.log('[SAP Scout Inject] inject.js has been executed!');
+
 
 // --- Helper function to send data back to the content script ---
 function sendDataToExtension(data) {
@@ -15,7 +15,7 @@ window.fetch = async (...args) => {
     const url = args[0] instanceof Request ? args[0].url : args[0];
 
     if (url.includes('/api/battle/get/')) {
-        console.log('[SAP Scout Inject] Intercepted battle API via fetch().');
+        
         const clonedResponse = response.clone();
         clonedResponse.json().then(sendDataToExtension);
     }
@@ -34,7 +34,7 @@ XMLHttpRequest.prototype.open = function(...args) {
 XMLHttpRequest.prototype.send = function(...args) {
     this.addEventListener('load', function() { // Use a regular function to preserve `this`
         if (this._url && this._url.includes('/api/battle/get/')) {
-            console.log('[SAP Scout Inject] SUCCESS: Intercepted battle API via XMLHttpRequest.');
+            
             try {
                 let responseData = '';
                 // --- THIS IS THE FIX ---
@@ -59,4 +59,3 @@ XMLHttpRequest.prototype.send = function(...args) {
     return originalXhrSend.apply(this, args);
 };
 
-console.log('[SAP Scout Inject] Patched both fetch and XMLHttpRequest.');
